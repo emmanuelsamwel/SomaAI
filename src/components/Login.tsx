@@ -33,15 +33,26 @@ export const Login: React.FC = () => {
       
       window.location.reload();
     } catch (error: any) {
-      console.error(error);
+      console.error('Login Error:', error);
+      
       if (error.code === 'auth/popup-closed-by-user') {
-        setError("Login popup was closed. Please try again.");
+        setError("The login window was closed before finishing. Please try again.");
+      } else if (error.code === 'auth/unauthorized-domain') {
+        setError("This domain is not authorized for Google Sign-In. Please check your Firebase Console settings.");
+      } else if (error.code === 'auth/network-request-failed') {
+        setError("Network error. Please check your connection or try opening the app in a new tab.");
+      } else if (error.code === 'auth/internal-error') {
+        setError("A Firebase internal error occurred. Opening in a new tab often fixes this.");
       } else {
-        setError("Failed to sign in with Google. Please ensure your browser allows popups.");
+        setError(`Login failed: ${error.message || "Unknown error"}. Try opening the app in a new tab.`);
       }
     } finally {
       setIsLoggingIn(false);
     }
+  };
+
+  const openInNewTab = () => {
+    window.open(window.location.href, '_blank');
   };
 
   return (
@@ -69,10 +80,18 @@ export const Login: React.FC = () => {
           <motion.div 
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-red-50 border border-red-100 p-5 rounded-3xl text-red-700 text-sm flex items-center gap-4 shadow-sm"
+            className="bg-red-50 border border-red-100 p-5 rounded-3xl text-red-700 text-sm flex flex-col gap-4 shadow-sm"
           >
-            <AlertCircle size={24} className="shrink-0" />
-            <p className="font-bold text-left">{error}</p>
+            <div className="flex items-center gap-4">
+              <AlertCircle size={24} className="shrink-0" />
+              <p className="font-bold text-left">{error}</p>
+            </div>
+            <button 
+              onClick={openInNewTab}
+              className="w-full py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl font-bold transition-colors text-xs"
+            >
+              Open App in New Tab (Recommended Fix)
+            </button>
           </motion.div>
         )}
 
