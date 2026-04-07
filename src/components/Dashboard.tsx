@@ -31,87 +31,76 @@ export const Dashboard: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-slate-50 flex font-sans">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen">
-        <div className="p-6 flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
-            <LayoutDashboard size={24} />
+      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen z-20">
+        <div className="p-8 flex items-center gap-4">
+          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-100 rotate-3">
+            <LayoutDashboard size={28} />
           </div>
-          <span className="font-black text-xl text-slate-900 tracking-tight">SomaAI</span>
+          <span className="font-display font-black text-2xl text-slate-900 tracking-tight">SomaAI</span>
         </div>
 
-        <nav className="flex-1 px-4 space-y-2 mt-4">
-          <button
-            onClick={() => handleTabChange('tutor')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === 'tutor' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-500 hover:bg-slate-100'
-            }`}
-          >
-            <BookOpen size={20} />
-            <span className="font-medium">AI Tutor</span>
-          </button>
-          <button
-            onClick={() => handleTabChange('progress')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === 'progress' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-500 hover:bg-slate-100'
-            }`}
-          >
-            <BarChart3 size={20} />
-            <span className="font-medium">Progress</span>
-          </button>
-          <button
-            onClick={() => handleTabChange('study-plan')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === 'study-plan' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-500 hover:bg-slate-100'
-            }`}
-          >
-            <Target size={20} />
-            <span className="font-medium">Study Plan</span>
-          </button>
-          <button
-            onClick={() => handleTabChange('settings')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-500 hover:bg-slate-100'
-            }`}
-          >
-            <Settings size={20} />
-            <span className="font-medium">Settings</span>
-          </button>
+        <nav className="flex-1 px-4 space-y-2 mt-6">
+          {[
+            { id: 'tutor', label: 'AI Tutor', icon: <BookOpen size={22} /> },
+            { id: 'progress', label: 'Progress', icon: <BarChart3 size={22} /> },
+            { id: 'study-plan', label: 'Study Plan', icon: <Target size={22} /> },
+            { id: 'settings', label: 'Settings', icon: <Settings size={22} /> },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => handleTabChange(tab.id as any)}
+              className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 group ${
+                activeTab === tab.id 
+                  ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' 
+                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <span className={`${activeTab === tab.id ? 'text-white' : 'text-slate-400 group-hover:text-indigo-600'} transition-colors`}>
+                {tab.icon}
+              </span>
+              <span className="font-bold tracking-tight">{tab.label}</span>
+            </button>
+          ))}
         </nav>
 
-        <div className="p-4 border-t border-slate-100">
-          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl mb-4">
-            <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-slate-500">
-              <UserIcon size={20} />
+        <div className="p-6 border-t border-slate-100">
+          <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl mb-6 border border-slate-100">
+            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-slate-400 shadow-sm border border-slate-100">
+              <UserIcon size={24} />
             </div>
             <div className="overflow-hidden">
-              <p className="text-sm font-bold text-slate-900 truncate">{profile?.displayName || 'User'}</p>
-              <p className="text-xs text-slate-500 capitalize">{profile?.role || 'Student'}</p>
+              <p className="text-sm font-black text-slate-900 truncate">{profile?.displayName || 'User'}</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{profile?.role || 'Student'}</p>
             </div>
           </div>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl transition-all"
+            className="w-full flex items-center gap-4 px-5 py-4 text-red-500 hover:bg-red-50 rounded-2xl transition-all font-bold"
           >
-            <LogOut size={20} />
-            <span className="font-medium">Sign Out</span>
+            <LogOut size={22} />
+            <span>Sign Out</span>
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-8 overflow-y-auto">
-        <header className="mb-8 flex justify-between items-end">
+      <main className="flex-1 p-10 overflow-y-auto">
+        <header className="mb-12 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-black text-slate-900">
-              Welcome back, {profile?.displayName?.split(' ')[0] || 'Learner'}!
+            <h1 className="text-4xl font-black text-slate-900 mb-2">
+              Welcome back, <span className="text-indigo-600">{profile?.displayName?.split(' ')[0] || 'Learner'}</span>!
             </h1>
-            <p className="text-slate-500 mt-1">Ready to master something new today?</p>
+            <p className="text-slate-500 font-medium text-lg">Ready to master something new today?</p>
           </div>
-          <div className="text-right">
-            <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Current Language</p>
-            <p className="text-indigo-600 font-bold">{profile?.language || 'English'}</p>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Current Language</p>
+              <div className="px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-full font-black text-sm border border-indigo-100">
+                {profile?.language || 'English'}
+              </div>
+            </div>
           </div>
         </header>
 

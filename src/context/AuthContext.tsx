@@ -17,7 +17,7 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   setProfile: (profile: UserProfile) => void;
-  loginAsMock: (role: 'student' | 'teacher') => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,26 +27,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loginAsMock = (role: 'student' | 'teacher') => {
-    const mockUser = {
-      uid: 'mock-user-id',
-      email: 'demo@somaai.com',
-      displayName: 'Demo User',
-    } as FirebaseUser;
-    
-    const mockProfile: UserProfile = {
-      uid: 'mock-user-id',
-      email: 'demo@somaai.com',
-      displayName: 'Demo User',
-      role: role,
-      language: 'English',
-      hobbies: ['Learning', 'AI'],
-      habits: ['Daily Study'],
-    };
-    
-    setUser(mockUser);
-    setProfile(mockProfile);
-    setLoading(false);
+  const logout = async () => {
+    await auth.signOut();
+    setUser(null);
+    setProfile(null);
   };
 
   useEffect(() => {
@@ -57,13 +41,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           setProfile(docSnap.data() as UserProfile);
-        }
-      } else {
-        // Only reset if we're not in mock mode
-        if (user?.uid !== 'mock-user-id') {
-          setUser(null);
+        } else {
           setProfile(null);
         }
+      } else {
+        setUser(null);
+        setProfile(null);
       }
       setLoading(false);
     });
@@ -72,7 +55,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, setProfile, loginAsMock }}>
+    <AuthContext.Provider value={{ user, profile, loading, setProfile, logout }}>
       {children}
     </AuthContext.Provider>
   );

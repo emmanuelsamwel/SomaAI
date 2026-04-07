@@ -114,6 +114,15 @@ service cloud.firestore {
              (!('progress' in data) || (data.progress is number && data.progress >= 0 && data.progress <= 100));
     }
 
+    function isValidFeedback(data) {
+      return data.keys().hasAll(['id', 'studentUid', 'teacherUid', 'content']) &&
+             data.id is string &&
+             data.studentUid is string &&
+             data.teacherUid == request.auth.uid &&
+             data.content is string && data.content.size() < 2000 &&
+             (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -143,6 +152,13 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isValidStudyPlan(request.resource.data);
       allow update: if isAuthenticated() && isValidStudyPlan(request.resource.data) && isOwner(resource.data.studentUid);
       allow delete: if isOwner(resource.data.studentUid) || isAdmin();
+    }
+
+    match /feedback/{feedbackId} {
+      allow read: if isAuthenticated() && (isOwner(resource.data.studentUid) || isTeacher() || isAdmin());
+      allow create: if isTeacher() && isValidFeedback(request.resource.data);
+      allow update: if isTeacher() && isValidFeedback(request.resource.data) && resource.data.teacherUid == request.auth.uid;
+      allow delete: if isAdmin();
     }
   }
 }

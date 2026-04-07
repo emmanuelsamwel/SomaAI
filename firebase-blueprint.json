@@ -56,6 +56,19 @@
         "progress": { "type": "number" }
       },
       "required": ["id", "studentUid", "goal"]
+    },
+    "Feedback": {
+      "title": "Feedback",
+      "description": "Teacher feedback for students",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentUid": { "type": "string" },
+        "teacherUid": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "studentUid", "teacherUid", "content"]
     }
   },
   "firestore": {
@@ -74,6 +87,10 @@
     "/studyPlans/{planId}": {
       "schema": "StudyPlan",
       "description": "Student study plans"
+    },
+    "/feedback/{feedbackId}": {
+      "schema": "Feedback",
+      "description": "Teacher feedback for students"
     }
   }
 }

@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Users, BookOpen, TrendingUp, AlertCircle, Search, Filter, Download, Sparkles, Bot, Send, User, Loader2, Languages, Plus, Trash2, CheckCircle2 } from 'lucide-react';
+import { Users, BookOpen, TrendingUp, AlertCircle, Search, Filter, Download, Sparkles, Bot, Send, User, Loader2, Languages, Plus, Trash2, CheckCircle2, MessageSquare, X, School, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getLessonPlanResponse } from '../services/geminiService';
 import ReactMarkdown from 'react-markdown';
 import { useSound } from '../context/SoundContext';
 import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDocs, query, orderBy, where, limit } from 'firebase/firestore';
 
 enum OperationType {
   CREATE = 'create',
@@ -42,6 +42,7 @@ export const TeacherDashboard: React.FC = () => {
   const { profile } = useAuth();
   const { playSound } = useSound();
   const [activeTab, setActiveTab] = useState<'students' | 'planner' | 'analytics' | 'topics'>('students');
+  const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
 
   const handleTabChange = (tab: typeof activeTab) => {
     playSound('pop');
@@ -49,72 +50,82 @@ export const TeacherDashboard: React.FC = () => {
   };
 
   const students = [
-    { name: 'Alice Johnson', grade: 'A', progress: 92, status: 'On Track', habits: ['Visual Learner', 'Morning Study'] },
-    { name: 'Bob Smith', grade: 'B-', progress: 65, status: 'Needs Attention', habits: ['Fast Reader', 'Evening Study'] },
-    { name: 'Charlie Brown', grade: 'C+', progress: 45, status: 'At Risk', habits: ['Gaming Enthusiast', 'Late Night'] },
-    { name: 'Diana Prince', grade: 'A+', progress: 98, status: 'On Track', habits: ['Researcher', 'Early Bird'] },
+    { uid: 'student_1', name: 'Alice Johnson', grade: 'A', progress: 92, status: 'On Track', habits: ['Visual Learner', 'Morning Study'] },
+    { uid: 'student_2', name: 'Bob Smith', grade: 'B-', progress: 65, status: 'Needs Attention', habits: ['Fast Reader', 'Evening Study'] },
+    { uid: 'student_3', name: 'Charlie Brown', grade: 'C+', progress: 45, status: 'At Risk', habits: ['Gaming Enthusiast', 'Late Night'] },
+    { uid: 'student_4', name: 'Diana Prince', grade: 'A+', progress: 98, status: 'On Track', habits: ['Researcher', 'Early Bird'] },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      {/* Sidebar (Simplified) */}
-      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen">
-        <div className="p-6 flex items-center gap-3">
-          <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-100">
-            <Users size={24} />
+    <div className="min-h-screen bg-slate-50 flex font-sans">
+      {/* Sidebar */}
+      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen z-20">
+        <div className="p-8 flex items-center gap-4">
+          <div className="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-emerald-100 rotate-3">
+            <School size={28} />
           </div>
-          <span className="font-black text-xl text-slate-900 tracking-tight">SomaAI</span>
+          <span className="font-display font-black text-2xl text-slate-900 tracking-tight">SomaAI</span>
         </div>
-        <nav className="flex-1 px-4 space-y-2 mt-4">
-          <button 
-            onClick={() => handleTabChange('students')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === 'students' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100' : 'text-slate-500 hover:bg-slate-100'
-            }`}
-          >
-            <Users size={20} />
-            <span className="font-medium">Students</span>
-          </button>
-          <button 
-            onClick={() => handleTabChange('planner')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === 'planner' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100' : 'text-slate-500 hover:bg-slate-100'
-            }`}
-          >
-            <Sparkles size={20} />
-            <span className="font-medium">AI Lesson Planner</span>
-          </button>
-          <button 
-            onClick={() => handleTabChange('topics')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === 'topics' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100' : 'text-slate-500 hover:bg-slate-100'
-            }`}
-          >
-            <BookOpen size={20} />
-            <span className="font-medium">Educational Topics</span>
-          </button>
-          <button 
-            onClick={() => handleTabChange('analytics')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === 'analytics' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100' : 'text-slate-500 hover:bg-slate-100'
-            }`}
-          >
-            <TrendingUp size={20} />
-            <span className="font-medium">Analytics</span>
-          </button>
+
+        <nav className="flex-1 px-4 space-y-2 mt-6">
+          {[
+            { id: 'students', label: 'Students', icon: <Users size={22} /> },
+            { id: 'topics', label: 'Topics', icon: <BookOpen size={22} /> },
+            { id: 'planner', label: 'Lesson Planner', icon: <Sparkles size={22} /> },
+            { id: 'analytics', label: 'Analytics', icon: <TrendingUp size={22} /> },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => handleTabChange(tab.id as any)}
+              className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 group ${
+                activeTab === tab.id 
+                  ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-100' 
+                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <span className={`${activeTab === tab.id ? 'text-white' : 'text-slate-400 group-hover:text-emerald-600'} transition-colors`}>
+                {tab.icon}
+              </span>
+              <span className="font-bold tracking-tight">{tab.label}</span>
+            </button>
+          ))}
         </nav>
+
+        <div className="p-6 border-t border-slate-100">
+          <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl mb-6 border border-slate-100">
+            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-slate-400 shadow-sm border border-slate-100">
+              <User size={24} />
+            </div>
+            <div className="overflow-hidden">
+              <p className="text-sm font-black text-slate-900 truncate">{profile?.displayName || 'Teacher'}</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Educator</p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              playSound('click');
+              window.location.reload();
+            }}
+            className="w-full flex items-center gap-4 px-5 py-4 text-red-500 hover:bg-red-50 rounded-2xl transition-all font-bold"
+          >
+            <LogOut size={22} />
+            <span>Sign Out</span>
+          </button>
+        </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-8 overflow-y-auto">
-        <header className="mb-8 flex justify-between items-end">
+      <main className="flex-1 p-10 overflow-y-auto">
+        <header className="mb-12 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-black text-slate-900">Teacher Dashboard</h1>
-            <p className="text-slate-500 mt-1">Tracking performance for Class 10-A</p>
+            <h1 className="text-4xl font-black text-slate-900 mb-2">
+              Teacher <span className="text-emerald-600">Dashboard</span>
+            </h1>
+            <p className="text-slate-500 font-medium text-lg">Empowering the next generation of learners.</p>
           </div>
-          <div className="flex gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 shadow-sm">
-              <Download size={16} /> Export Report
+          <div className="flex items-center gap-4">
+            <button className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-emerald-600 transition-all shadow-sm">
+              <Download size={20} />
             </button>
           </div>
         </header>
@@ -199,7 +210,18 @@ export const TeacherDashboard: React.FC = () => {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <button className="text-emerald-600 font-bold text-sm hover:underline">View Details</button>
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => {
+                                playSound('pop');
+                                setSelectedStudent(s);
+                              }}
+                              className="text-emerald-600 font-bold text-sm hover:underline flex items-center gap-1"
+                            >
+                              <MessageSquare size={14} /> Feedback
+                            </button>
+                            <button className="text-slate-400 font-bold text-sm hover:underline">Details</button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -207,6 +229,15 @@ export const TeacherDashboard: React.FC = () => {
                 </table>
               </div>
             </div>
+
+            <AnimatePresence>
+              {selectedStudent && (
+                <FeedbackModal 
+                  student={selectedStudent} 
+                  onClose={() => setSelectedStudent(null)} 
+                />
+              )}
+            </AnimatePresence>
 
             {/* AI Insights Section */}
             <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -267,6 +298,155 @@ export const TeacherDashboard: React.FC = () => {
         )}
       </main>
     </div>
+  );
+};
+
+const FeedbackModal: React.FC<{ student: any; onClose: () => void }> = ({ student, onClose }) => {
+  const { profile } = useAuth();
+  const { playSound } = useSound();
+  const [feedback, setFeedback] = useState('');
+  const [history, setHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    fetchFeedback();
+  }, [student.uid]);
+
+  const fetchFeedback = async () => {
+    try {
+      const q = query(
+        collection(db, 'feedback'),
+        where('studentUid', '==', student.uid),
+        orderBy('createdAt', 'desc'),
+        limit(10)
+      );
+      const querySnapshot = await getDocs(q);
+      const fetchedFeedback = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setHistory(fetchedFeedback);
+    } catch (error) {
+      console.error('Error fetching feedback:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!feedback.trim() || !profile) return;
+
+    setSubmitting(true);
+    playSound('pop');
+
+    try {
+      const feedbackData = {
+        id: `fb_${Date.now()}`,
+        studentUid: student.uid,
+        teacherUid: profile.uid,
+        content: feedback,
+        createdAt: serverTimestamp()
+      };
+
+      await addDoc(collection(db, 'feedback'), feedbackData);
+      setFeedback('');
+      playSound('notification');
+      fetchFeedback();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'feedback');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+    >
+      <motion.div 
+        initial={{ scale: 0.9, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.9, y: 20 }}
+        className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+      >
+        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-100">
+              <MessageSquare size={24} />
+            </div>
+            <div>
+              <h2 className="font-black text-slate-900 text-lg">Student Feedback</h2>
+              <p className="text-xs text-slate-500 font-medium">Recording progress for {student.name}</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => {
+              playSound('pop');
+              onClose();
+            }}
+            className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition-colors"
+          >
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+          {/* Feedback Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-slate-700 ml-1">New Feedback Note</label>
+              <textarea 
+                required
+                rows={3}
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                placeholder={`How is ${student.name.split(' ')[0]} doing today? Mention progress or habits...`}
+                className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-emerald-50 focus:border-emerald-500 outline-none transition-all font-medium resize-none"
+              />
+            </div>
+            <div className="flex justify-end">
+              <button 
+                disabled={submitting || !feedback.trim()}
+                type="submit"
+                className="px-6 py-2.5 bg-emerald-600 text-white font-black rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 disabled:opacity-50 flex items-center gap-2"
+              >
+                {submitting ? <Loader2 className="animate-spin" size={18} /> : <Plus size={18} />}
+                Save Note
+              </button>
+            </div>
+          </form>
+
+          {/* Feedback History */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Recent Feedback History</h3>
+            {loading ? (
+              <div className="py-12 flex justify-center">
+                <Loader2 className="animate-spin text-emerald-600" size={32} />
+              </div>
+            ) : history.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 italic bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                No feedback recorded yet for this student.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {history.map((item) => (
+                  <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 relative group">
+                    <p className="text-sm text-slate-700 leading-relaxed mb-2">{item.content}</p>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold text-slate-400">
+                        {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleString() : 'Just now'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
