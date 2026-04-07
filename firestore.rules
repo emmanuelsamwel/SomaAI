@@ -1,0 +1,148 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: {uid}
+// Fields:
+//   - uid: string (required) - User ID
+//   - email: string (required, email) - User email
+//   - displayName: string (optional) - User display name
+//   - role: string (required, enum: ['student', 'teacher']) - User role
+//   - language: string (optional) - Preferred language
+//   - hobbies: list (optional) - List of hobbies
+//   - habits: list (optional) - List of habits
+//
+// Collection: topics
+// Document ID: {topicId}
+// Fields:
+//   - id: string (required) - Topic ID
+//   - title: string (required) - Topic title
+//   - description: string (optional) - Topic description
+//   - content: string (optional) - Topic content
+//   - modelType: string (optional) - 3D model type
+//
+// Collection: progress
+// Document ID: {progressId}
+// Fields:
+//   - studentUid: string (required) - Student UID
+//   - topicId: string (required) - Topic ID
+//   - score: number (optional) - Progress score
+//   - completed: bool (optional) - Completion status
+//   - lastAccessed: timestamp (optional) - Last access time
+//
+// Collection: studyPlans
+// Document ID: {planId}
+// Fields:
+//   - id: string (required) - Plan ID
+//   - studentUid: string (required) - Student UID
+//   - goal: string (required) - Study goal
+//   - targetDate: string (optional, date) - Target completion date
+//   - linkedTopics: list (optional) - List of linked topic IDs
+//   - completed: bool (optional) - Completion status
+//   - progress: number (optional) - Progress percentage
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "samwelemmanuelezekiel@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isTeacher() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher';
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             data.role in ['student', 'teacher'] &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
+             (!('language' in data) || (data.language is string && data.language.size() < 50)) &&
+             (!('hobbies' in data) || data.hobbies is list) &&
+             (!('habits' in data) || data.habits is list);
+    }
+
+    function isValidTopic(data) {
+      return data.keys().hasAll(['id', 'title']) &&
+             data.id is string && data.id.size() < 100 &&
+             data.title is string && data.title.size() < 200 &&
+             (!('description' in data) || (data.description is string && data.description.size() < 1000)) &&
+             (!('content' in data) || (data.content is string && data.content.size() < 10000)) &&
+             (!('modelType' in data) || (data.modelType is string && data.modelType.size() < 50)) &&
+             (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidProgress(data) {
+      return data.keys().hasAll(['studentUid', 'topicId']) &&
+             data.studentUid == request.auth.uid &&
+             data.topicId is string &&
+             (!('score' in data) || (data.score is number && data.score >= 0 && data.score <= 100)) &&
+             (!('completed' in data) || data.completed is bool);
+    }
+
+    function isValidStudyPlan(data) {
+      return data.keys().hasAll(['id', 'studentUid', 'goal']) &&
+             data.id is string &&
+             data.studentUid == request.auth.uid &&
+             data.goal is string && data.goal.size() < 500 &&
+             (!('targetDate' in data) || data.targetDate is string) &&
+             (!('linkedTopics' in data) || data.linkedTopics is list) &&
+             (!('completed' in data) || data.completed is bool) &&
+             (!('progress' in data) || (data.progress is number && data.progress >= 0 && data.progress <= 100));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isTeacher() || isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /topics/{topicId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isTeacher() && isValidTopic(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /progress/{progressId} {
+      allow read: if isOwner(resource.data.studentUid) || isTeacher() || isAdmin();
+      allow create: if isAuthenticated() && isValidProgress(request.resource.data);
+      allow update: if isAuthenticated() && isValidProgress(request.resource.data) && isOwner(resource.data.studentUid);
+      allow delete: if isOwner(resource.data.studentUid) || isAdmin();
+    }
+
+    match /studyPlans/{planId} {
+      allow read: if isOwner(resource.data.studentUid) || isTeacher() || isAdmin();
+      allow create: if isAuthenticated() && isValidStudyPlan(request.resource.data);
+      allow update: if isAuthenticated() && isValidStudyPlan(request.resource.data) && isOwner(resource.data.studentUid);
+      allow delete: if isOwner(resource.data.studentUid) || isAdmin();
+    }
+  }
+}

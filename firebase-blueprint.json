@@ -1,0 +1,79 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["student", "teacher"] },
+        "language": { "type": "string" },
+        "hobbies": { "type": "array", "items": { "type": "string" } },
+        "habits": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Topic": {
+      "title": "Topic",
+      "description": "Educational topic details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "content": { "type": "string" },
+        "modelType": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title"]
+    },
+    "Progress": {
+      "title": "Progress",
+      "description": "Student progress tracking",
+      "type": "object",
+      "properties": {
+        "studentUid": { "type": "string" },
+        "topicId": { "type": "string" },
+        "score": { "type": "number" },
+        "completed": { "type": "boolean" },
+        "lastAccessed": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentUid", "topicId"]
+    },
+    "StudyPlan": {
+      "title": "StudyPlan",
+      "description": "Student study goals and plans",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentUid": { "type": "string" },
+        "goal": { "type": "string" },
+        "targetDate": { "type": "string", "format": "date" },
+        "linkedTopics": { "type": "array", "items": { "type": "string" } },
+        "completed": { "type": "boolean" },
+        "progress": { "type": "number" }
+      },
+      "required": ["id", "studentUid", "goal"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/topics/{topicId}": {
+      "schema": "Topic",
+      "description": "Educational topics"
+    },
+    "/progress/{progressId}": {
+      "schema": "Progress",
+      "description": "Student progress tracking"
+    },
+    "/studyPlans/{planId}": {
+      "schema": "StudyPlan",
+      "description": "Student study plans"
+    }
+  }
+}

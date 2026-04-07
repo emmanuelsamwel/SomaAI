@@ -1,0 +1,5 @@
+{
+  "name": "SomaAI",
+  "description": "An interactive AI-powered educational platform that solves learning challenges through personalized tutoring, 3D visual aids, and teacher tracking.",
+  "requestFramePermissions": ["microphone"]
+}
