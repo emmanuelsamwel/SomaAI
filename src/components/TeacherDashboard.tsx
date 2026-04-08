@@ -523,6 +523,7 @@ const FeedbackModal: React.FC<{ student: any; onClose: () => void }> = ({ studen
 };
 
 const TopicManager: React.FC = () => {
+  const { profile } = useAuth();
   const { playSound } = useSound();
   const [topics, setTopics] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -531,7 +532,8 @@ const TopicManager: React.FC = () => {
     title: '',
     description: '',
     content: '',
-    modelType: 'skeleton' as 'skeleton' | 'engine' | 'cell' | 'solar_system'
+    modelType: 'skeleton' as 'skeleton' | 'engine' | 'cell' | 'solar_system',
+    createStudyPlan: false
   });
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -568,6 +570,26 @@ const TopicManager: React.FC = () => {
       };
 
       await addDoc(collection(db, 'topics'), topicData);
+
+      if (formData.createStudyPlan) {
+        // Create a study plan for the current user (teacher) as a template
+        // or we could create it for all students if we had a list.
+        // For now, let's create it for the teacher to show it works.
+        await addDoc(collection(db, 'studyPlans'), {
+          studentUid: profile?.uid,
+          goal: `Master ${formData.title}`,
+          targetDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          linkedTopics: [topicData.id],
+          tasks: [
+            { title: 'Read topic content', completed: false },
+            { title: 'Explore 3D model', completed: false },
+            { title: 'Take the quiz', completed: false }
+          ],
+          completed: false,
+          progress: 0
+        });
+      }
+
       setSuccess(true);
       playSound('notification');
       
@@ -579,7 +601,8 @@ const TopicManager: React.FC = () => {
           title: '',
           description: '',
           content: '',
-          modelType: 'skeleton'
+          modelType: 'skeleton',
+          createStudyPlan: false
         });
         fetchTopics();
       }, 2000);
@@ -651,6 +674,19 @@ const TopicManager: React.FC = () => {
                       <option value="solar_system">Solar System</option>
                     </select>
                   </div>
+                </div>
+
+                <div className="flex items-center gap-3 p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                  <input 
+                    type="checkbox"
+                    id="createStudyPlan"
+                    checked={formData.createStudyPlan}
+                    onChange={(e) => setFormData({ ...formData, createStudyPlan: e.target.checked })}
+                    className="w-5 h-5 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                  />
+                  <label htmlFor="createStudyPlan" className="text-sm font-bold text-emerald-900 cursor-pointer">
+                    Automatically create a Study Plan for this topic
+                  </label>
                 </div>
 
                 <div className="space-y-2">

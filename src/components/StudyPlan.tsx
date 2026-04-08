@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, collection, addDoc, query, where, onSnapshot, updateDoc, doc, deleteDoc, getDocs } from '../firebase';
-import { Plus, Target, Calendar, CheckCircle2, Circle, Trash2, BookOpen, Loader2, Check } from 'lucide-react';
+import { Plus, Target, Calendar, CheckCircle2, Circle, Trash2, BookOpen, Loader2, Check, Sparkles, ListTodo } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useSound } from '../context/SoundContext';
+import { generateStudyPlan } from '../services/geminiService';
 
 interface Topic {
   id: string;
@@ -16,6 +17,7 @@ interface StudyPlanItem {
   goal: string;
   targetDate: string;
   linkedTopics: string[];
+  tasks?: { title: string; completed: boolean }[];
   completed: boolean;
   progress: number;
 }
@@ -29,7 +31,10 @@ export const StudyPlan: React.FC = () => {
   const [newGoal, setNewGoal] = useState('');
   const [newTargetDate, setNewTargetDate] = useState('');
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+  const [tasks, setTasks] = useState<{ title: string; completed: boolean }[]>([]);
+  const [newTask, setNewTask] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [editingTopicsPlanId, setEditingTopicsPlanId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -111,6 +116,7 @@ export const StudyPlan: React.FC = () => {
         goal: newGoal,
         targetDate: newTargetDate,
         linkedTopics: selectedTopics,
+        tasks: tasks,
         completed: false,
         progress: 0
       });
@@ -118,6 +124,7 @@ export const StudyPlan: React.FC = () => {
       setNewGoal('');
       setNewTargetDate('');
       setSelectedTopics([]);
+      setTasks([]);
       setIsAdding(false);
     } catch (error) {
       console.error("Error adding study plan:", error);
@@ -158,19 +165,80 @@ export const StudyPlan: React.FC = () => {
     }
 
     if (user?.uid === 'mock-user-id') {
-      setPlans(prev => prev.map(p => p.id === plan.id ? { ...p, completed: !p.completed, progress: !p.completed ? 100 : 0 } : p));
+      setPlans(prev => prev.map(p => p.id === plan.id ? { ...p, completed: !p.completed, progress: !p.completed ? 100 : 0, tasks: p.tasks?.map(t => ({ ...t, completed: !p.completed })) } : p));
+      return;
+    }
+
+    try {
+      const planRef = doc(db, 'studyPlans', plan.id);
+      const newCompleted = !plan.completed;
+      const updatedTasks = plan.tasks?.map(t => ({ ...t, completed: newCompleted })) || [];
+      
+      await updateDoc(planRef, {
+        completed: newCompleted,
+        progress: newCompleted ? 100 : 0,
+        tasks: updatedTasks
+      });
+    } catch (error) {
+      console.error("Error updating study plan:", error);
+    }
+  };
+
+  const toggleTask = async (plan: StudyPlanItem, taskIndex: number) => {
+    playSound('pop');
+    const updatedTasks = [...(plan.tasks || [])];
+    updatedTasks[taskIndex].completed = !updatedTasks[taskIndex].completed;
+    
+    const completedCount = updatedTasks.filter(t => t.completed).length;
+    const progress = Math.round((completedCount / updatedTasks.length) * 100);
+    const completed = progress === 100;
+
+    if (user?.uid === 'mock-user-id') {
+      setPlans(prev => prev.map(p => p.id === plan.id ? { ...p, tasks: updatedTasks, progress, completed } : p));
       return;
     }
 
     try {
       const planRef = doc(db, 'studyPlans', plan.id);
       await updateDoc(planRef, {
-        completed: !plan.completed,
-        progress: !plan.completed ? 100 : 0
+        tasks: updatedTasks,
+        progress,
+        completed
       });
     } catch (error) {
-      console.error("Error updating study plan:", error);
+      console.error("Error updating task:", error);
     }
+  };
+
+  const handleGenerateAI = async () => {
+    if (!newGoal.trim()) return;
+    setGenerating(true);
+    playSound('pop');
+    try {
+      const aiPlan = await generateStudyPlan(newGoal);
+      if (aiPlan) {
+        setNewGoal(aiPlan.goal);
+        setNewTargetDate(aiPlan.targetDate);
+        setTasks(aiPlan.tasks);
+        playSound('notification');
+      }
+    } catch (error) {
+      console.error("Error generating AI plan:", error);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const addTask = () => {
+    if (!newTask.trim()) return;
+    setTasks([...tasks, { title: newTask, completed: false }]);
+    setNewTask('');
+    playSound('pop');
+  };
+
+  const removeTask = (index: number) => {
+    setTasks(tasks.filter((_, i) => i !== index));
+    playSound('delete');
   };
 
   const handleDelete = async (id: string) => {
@@ -223,16 +291,27 @@ export const StudyPlan: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label className="text-sm font-bold text-slate-700">What is your goal?</label>
-                <div className="relative">
-                  <Target className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                  <input
-                    type="text"
-                    value={newGoal}
-                    onChange={(e) => setNewGoal(e.target.value)}
-                    placeholder="e.g., Master Human Anatomy"
-                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
-                    required
-                  />
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Target className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                      type="text"
+                      value={newGoal}
+                      onChange={(e) => setNewGoal(e.target.value)}
+                      placeholder="e.g., Master Human Anatomy"
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
+                      required
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleGenerateAI}
+                    disabled={generating || !newGoal.trim()}
+                    className="px-4 py-3 bg-indigo-50 text-indigo-600 rounded-xl font-bold hover:bg-indigo-100 transition-all flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {generating ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+                    <span className="hidden sm:inline">AI Plan</span>
+                  </button>
                 </div>
               </div>
               <div className="space-y-2">
@@ -245,6 +324,43 @@ export const StudyPlan: React.FC = () => {
                     onChange={(e) => setNewTargetDate(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
                   />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                <ListTodo size={16} /> Study Tasks
+              </label>
+              <div className="space-y-2">
+                {tasks.map((task, i) => (
+                  <div key={i} className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                    <span className="flex-1 text-sm font-medium text-slate-700">{task.title}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeTask(i)}
+                      className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newTask}
+                    onChange={(e) => setNewTask(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTask())}
+                    placeholder="Add a specific task..."
+                    className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-100 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={addTask}
+                    className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg font-bold text-sm hover:bg-slate-300 transition-all"
+                  >
+                    Add
+                  </button>
                 </div>
               </div>
             </div>
@@ -342,6 +458,26 @@ export const StudyPlan: React.FC = () => {
                   </button>
                 </div>
               </div>
+
+              {/* Tasks List */}
+              {plan.tasks && plan.tasks.length > 0 && (
+                <div className="space-y-2 mt-2">
+                  {plan.tasks.map((task, i) => (
+                    <button
+                      key={i}
+                      onClick={() => toggleTask(plan, i)}
+                      className="w-full flex items-center gap-3 p-3 bg-slate-50/50 hover:bg-slate-50 rounded-xl border border-slate-100 transition-all text-left group"
+                    >
+                      <div className={`shrink-0 transition-colors ${task.completed ? 'text-emerald-500' : 'text-slate-300 group-hover:text-indigo-400'}`}>
+                        {task.completed ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+                      </div>
+                      <span className={`text-sm font-medium ${task.completed ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                        {task.title}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Linked Topics Display & Management */}
               <div className="pt-4 border-t border-slate-100 flex flex-col gap-3">

@@ -1,20 +1,28 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, User, Bot, Loader2, Upload, Languages } from 'lucide-react';
-import { getTutorResponse, analyzeNotes, generateQuiz } from '../services/geminiService';
+import { Send, User, Bot, Loader2, Upload, Languages, Target, Plus, Sparkles, Volume2, VolumeX, Download, FileText, Presentation, File as FileIcon, ChevronDown } from 'lucide-react';
+import { getTutorResponse, analyzeNotes, generateQuiz, generateStudyPlan, getSpeech } from '../services/geminiService';
+import { jsPDF } from 'jspdf';
+import { Document, Packer, Paragraph, TextRun } from 'docx';
+import pptxgen from 'pptxgenjs';
+import { saveAs } from 'file-saver';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { ModelViewer } from './ModelViewer';
 import { Quiz } from './Quiz';
 import { useSound } from '../context/SoundContext';
+import { useAuth } from '../context/AuthContext';
+import { db, collection, addDoc } from '../firebase';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  modelType?: 'skeleton' | 'engine' | 'cell' | 'solar_system';
+  modelType?: 'skeleton' | 'engine' | 'cell' | 'solar_system' | 'heart' | 'brain';
   quizData?: any;
+  studyPlanData?: any;
 }
 
 export const Tutor: React.FC = () => {
+  const { user } = useAuth();
   const { playSound } = useSound();
   const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', content: 'Hello! I am SomaAI, your personal learning assistant. What would you like to learn today? You can also upload your notes for me to explain!' }
@@ -22,13 +30,141 @@ export const Tutor: React.FC = () => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [language, setLanguage] = useState('English');
+  const [isVoiceEnabled, setIsVoiceEnabled] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(scrollToBottom, [messages]);
+
+  const speak = async (text: string) => {
+    if (!isVoiceEnabled) return;
+    
+    try {
+      setIsSpeaking(true);
+      const base64Audio = await getSpeech(text);
+      if (base64Audio) {
+        const audioSrc = `data:audio/wav;base64,${base64Audio}`;
+        if (audioRef.current) {
+          audioRef.current.src = audioSrc;
+          audioRef.current.play();
+        } else {
+          const audio = new Audio(audioSrc);
+          audioRef.current = audio;
+          audio.onended = () => setIsSpeaking(false);
+          audio.play();
+        }
+      }
+    } catch (error) {
+      console.error('Speech error:', error);
+      setIsSpeaking(false);
+    }
+  };
+
+  const stopSpeaking = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      setIsSpeaking(false);
+    }
+  };
+
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    let y = 20;
+    doc.setFontSize(20);
+    doc.text("SomaAI Lesson Summary", 20, y);
+    y += 15;
+    doc.setFontSize(12);
+
+    messages.forEach((msg) => {
+      const role = msg.role === 'user' ? 'Student' : 'SomaAI';
+      const lines = doc.splitTextToSize(`${role}: ${msg.content}`, 170);
+      
+      if (y + (lines.length * 7) > 280) {
+        doc.addPage();
+        y = 20;
+      }
+      
+      doc.text(lines, 20, y);
+      y += (lines.length * 7) + 5;
+    });
+
+    doc.save('SomaAI_Lesson.pdf');
+    setShowExportMenu(false);
+    playSound('success');
+  };
+
+  const exportToWord = async () => {
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "SomaAI Lesson Summary",
+                bold: true,
+                size: 32,
+              }),
+            ],
+          }),
+          ...messages.map(msg => new Paragraph({
+            children: [
+              new TextRun({
+                text: `${msg.role === 'user' ? 'Student' : 'SomaAI'}: `,
+                bold: true,
+              }),
+              new TextRun(msg.content),
+            ],
+            spacing: { before: 200 },
+          })),
+        ],
+      }],
+    });
+
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, "SomaAI_Lesson.docx");
+    setShowExportMenu(false);
+    playSound('success');
+  };
+
+  const exportToPPT = () => {
+    const pres = new pptxgen();
+    
+    // Title Slide
+    let slide = pres.addSlide();
+    slide.addText("SomaAI Lesson Summary", { x: 1, y: 1, w: '80%', h: 1, fontSize: 36, bold: true, align: 'center', color: '363636' });
+    slide.addText(`Generated on ${new Date().toLocaleDateString()}`, { x: 1, y: 2.5, w: '80%', h: 0.5, fontSize: 18, align: 'center', color: '666666' });
+
+    // Content Slides
+    messages.forEach((msg, idx) => {
+      if (idx === 0) return; // Skip initial greeting for brevity or handle it
+      let contentSlide = pres.addSlide();
+      contentSlide.addText(msg.role === 'user' ? 'Student Question' : 'SomaAI Explanation', { x: 0.5, y: 0.5, w: '90%', h: 0.5, fontSize: 24, bold: true, color: '4F46E5' });
+      contentSlide.addText(msg.content, { x: 0.5, y: 1.2, w: '90%', h: '70%', fontSize: 14, color: '333333', align: 'left', valign: 'top' });
+    });
+
+    pres.writeFile({ fileName: "SomaAI_Lesson.pptx" });
+    setShowExportMenu(false);
+    playSound('success');
+  };
 
   const handleQuickAction = (action: string) => {
     setInput(action);
@@ -62,13 +198,63 @@ export const Tutor: React.FC = () => {
     }
   };
 
+  const handleStudyPlanRequest = async (topic: string) => {
+    setLoading(true);
+    playSound('pop');
+    try {
+      const plan = await generateStudyPlan(topic, language);
+      if (plan) {
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: `I've drafted a study plan for **${topic}**. Would you like to add it to your goals?`,
+          studyPlanData: plan 
+        }]);
+        playSound('notification');
+      }
+    } catch (error) {
+      console.error(error);
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error while generating the study plan.' }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addToStudyPlan = async (plan: any) => {
+    if (!user) return;
+    playSound('success');
+    try {
+      await addDoc(collection(db, 'studyPlans'), {
+        studentUid: user.uid,
+        goal: plan.goal,
+        targetDate: plan.targetDate,
+        tasks: plan.tasks,
+        linkedTopics: [],
+        completed: false,
+        progress: 0
+      });
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: `✅ Successfully added **${plan.goal}** to your study plans!` 
+      }]);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   const submitMessage = async (text: string) => {
     if (!text.trim() || loading) return;
 
     if (text.toLowerCase().includes('quiz')) {
-      const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant' && !m.quizData);
+      const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant' && !m.quizData && !m.studyPlanData);
       const topic = lastAssistantMsg ? lastAssistantMsg.content.split('\n')[0].replace(/[#*]/g, '').trim() : "the current topic";
       handleQuizRequest(topic);
+      return;
+    }
+
+    if (text.toLowerCase().includes('study plan') || text.toLowerCase().includes('goal')) {
+      const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant' && !m.quizData && !m.studyPlanData);
+      const topic = lastAssistantMsg ? lastAssistantMsg.content.split('\n')[0].replace(/[#*]/g, '').trim() : "the current topic";
+      handleStudyPlanRequest(topic);
       return;
     }
 
@@ -82,13 +268,29 @@ export const Tutor: React.FC = () => {
       const response = await getTutorResponse(text, language);
       
       let modelType: Message['modelType'];
-      if (text.toLowerCase().includes('skeleton') || response.toLowerCase().includes('skeleton')) modelType = 'skeleton';
-      else if (text.toLowerCase().includes('engine') || response.toLowerCase().includes('engine')) modelType = 'engine';
-      else if (text.toLowerCase().includes('cell') || response.toLowerCase().includes('cell')) modelType = 'cell';
-      else if (text.toLowerCase().includes('solar system') || response.toLowerCase().includes('solar system')) modelType = 'solar_system';
+      
+      // Check for explicit [MODEL:type] tag first
+      const modelMatch = response.match(/\[MODEL:(skeleton|engine|cell|solar_system|heart|brain)\]/i);
+      if (modelMatch) {
+        modelType = modelMatch[1].toLowerCase() as Message['modelType'];
+      } else {
+        // Fallback to keyword detection
+        if (text.toLowerCase().includes('skeleton') || response.toLowerCase().includes('skeleton')) modelType = 'skeleton';
+        else if (text.toLowerCase().includes('engine') || response.toLowerCase().includes('engine')) modelType = 'engine';
+        else if (text.toLowerCase().includes('cell') || response.toLowerCase().includes('cell')) modelType = 'cell';
+        else if (text.toLowerCase().includes('solar system') || response.toLowerCase().includes('solar system')) modelType = 'solar_system';
+        else if (text.toLowerCase().includes('heart') || response.toLowerCase().includes('heart')) modelType = 'heart';
+        else if (text.toLowerCase().includes('brain') || response.toLowerCase().includes('brain')) modelType = 'brain';
+      }
 
-      setMessages(prev => [...prev, { role: 'assistant', content: response, modelType }]);
+      // Clean up the response text by removing the tag for display
+      const displayContent = response.replace(/\[MODEL:.*?\]/g, '').trim();
+
+      setMessages(prev => [...prev, { role: 'assistant', content: displayContent, modelType }]);
       playSound('notification');
+      if (isVoiceEnabled) {
+        speak(displayContent);
+      }
     } catch (error) {
       console.error(error);
       setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error. Please try again.' }]);
@@ -113,6 +315,9 @@ export const Tutor: React.FC = () => {
         const response = await analyzeNotes(text, language);
         setMessages(prev => [...prev, { role: 'assistant', content: response }]);
         playSound('notification');
+        if (isVoiceEnabled) {
+          speak(response);
+        }
       } catch (error) {
         console.error(error);
       } finally {
@@ -125,7 +330,7 @@ export const Tutor: React.FC = () => {
   const quickActions = [
     "I understand!",
     "Can you explain that again?",
-    "Give me another analogy.",
+    "Create a study plan for this!",
     "Test me with a quiz!"
   ];
 
@@ -143,6 +348,70 @@ export const Tutor: React.FC = () => {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <div className="relative" ref={exportMenuRef}>
+            <button
+              onClick={() => {
+                setShowExportMenu(!showExportMenu);
+                playSound('click');
+              }}
+              className="flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-all font-bold text-xs"
+              title="Export Lesson"
+            >
+              <Download size={16} />
+              <span>Export</span>
+              <ChevronDown size={14} className={`transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
+            </button>
+
+            <AnimatePresence>
+              {showExportMenu && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 overflow-hidden"
+                >
+                  <button
+                    onClick={exportToPDF}
+                    className="w-full px-4 py-3 flex items-center gap-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
+                    <FileIcon size={18} className="text-red-500" />
+                    <span>Export as PDF</span>
+                  </button>
+                  <button
+                    onClick={exportToWord}
+                    className="w-full px-4 py-3 flex items-center gap-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
+                    <FileText size={18} className="text-blue-500" />
+                    <span>Export as Word</span>
+                  </button>
+                  <button
+                    onClick={exportToPPT}
+                    className="w-full px-4 py-3 flex items-center gap-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
+                    <Presentation size={18} className="text-orange-500" />
+                    <span>Export as PPT</span>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <button
+            onClick={() => {
+              const newState = !isVoiceEnabled;
+              setIsVoiceEnabled(newState);
+              if (!newState) stopSpeaking();
+              playSound('click');
+            }}
+            className={`p-2 rounded-xl transition-all ${
+              isVoiceEnabled 
+                ? 'bg-indigo-100 text-indigo-600' 
+                : 'bg-slate-100 text-slate-400'
+            }`}
+            title={isVoiceEnabled ? "Disable Voice" : "Enable Voice"}
+          >
+            {isVoiceEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+          </button>
           <Languages size={18} className="text-slate-400" />
           <select 
             value={language} 
@@ -184,6 +453,33 @@ export const Tutor: React.FC = () => {
                     </ReactMarkdown>
                   </div>
                 </div>
+                {m.studyPlanData && (
+                  <motion.div
+                    initial={{ scale: 0.95, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="bg-white p-6 rounded-3xl border border-indigo-100 shadow-xl shadow-indigo-50 space-y-4"
+                  >
+                    <div className="flex items-center gap-3 text-indigo-600">
+                      <Target size={24} />
+                      <h3 className="font-black text-lg">{m.studyPlanData.goal}</h3>
+                    </div>
+                    <div className="space-y-2">
+                      {m.studyPlanData.tasks.map((task: any, idx: number) => (
+                        <div key={idx} className="flex items-center gap-2 text-slate-600 text-sm">
+                          <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full" />
+                          {task.title}
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => addToStudyPlan(m.studyPlanData)}
+                      className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-100"
+                    >
+                      <Plus size={18} />
+                      Add to My Study Plans
+                    </button>
+                  </motion.div>
+                )}
                 {m.quizData && (
                   <motion.div
                     initial={{ scale: 0.95, opacity: 0 }}

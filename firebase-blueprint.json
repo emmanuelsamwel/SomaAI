@@ -52,6 +52,16 @@
         "goal": { "type": "string" },
         "targetDate": { "type": "string", "format": "date" },
         "linkedTopics": { "type": "array", "items": { "type": "string" } },
+        "tasks": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "completed": { "type": "boolean" }
+            }
+          }
+        },
         "completed": { "type": "boolean" },
         "progress": { "type": "number" }
       },
