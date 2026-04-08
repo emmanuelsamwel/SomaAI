@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Users, BookOpen, TrendingUp, AlertCircle, Search, Filter, Download, Sparkles, Bot, Send, User, Loader2, Languages, Plus, Trash2, CheckCircle2, MessageSquare, X, School, LogOut } from 'lucide-react';
+import { Users, BookOpen, TrendingUp, AlertCircle, Search, Filter, Download, Sparkles, Bot, Send, User, Loader2, Languages, Plus, Trash2, CheckCircle2, MessageSquare, X, School, LogOut, Target } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getLessonPlanResponse } from '../services/geminiService';
 import ReactMarkdown from 'react-markdown';
@@ -43,6 +43,9 @@ export const TeacherDashboard: React.FC = () => {
   const { playSound } = useSound();
   const [activeTab, setActiveTab] = useState<'students' | 'planner' | 'analytics' | 'topics'>('students');
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isFocusMode, setIsFocusMode] = useState(false);
 
   const handleTabChange = (tab: typeof activeTab) => {
     playSound('pop');
@@ -57,17 +60,47 @@ export const TeacherDashboard: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 flex font-sans">
+    <div className="min-h-screen bg-slate-50 flex font-sans overflow-hidden">
+      {/* Mobile Overlay */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSidebarOpen(false)}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-30 lg:hidden"
+          />
+        )}
+      </AnimatePresence>
+
       {/* Sidebar */}
-      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen z-20">
-        <div className="p-8 flex items-center gap-4">
-          <div className="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-emerald-100 rotate-3">
+      <aside className={`
+        fixed inset-y-0 left-0 z-40 lg:relative lg:translate-x-0 transition-all duration-300 ease-in-out bg-white border-r border-slate-200 flex flex-col h-screen
+        ${isSidebarOpen ? 'translate-x-0 w-72' : '-translate-x-full lg:translate-x-0'}
+        ${isSidebarCollapsed ? 'lg:w-20' : 'lg:w-72'}
+      `}>
+        <div className={`p-6 flex items-center ${isSidebarCollapsed ? 'lg:justify-center' : 'gap-4'}`}>
+          <div className="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-emerald-100 rotate-3 shrink-0">
             <School size={28} />
           </div>
-          <span className="font-display font-black text-2xl text-slate-900 tracking-tight">SomaAI</span>
+          {(!isSidebarCollapsed || isSidebarOpen) && (
+            <span className="font-display font-black text-2xl text-slate-900 tracking-tight truncate">SomaAI</span>
+          )}
         </div>
 
-        <nav className="flex-1 px-4 space-y-2 mt-6">
+        <div className="px-4 mb-4 hidden lg:block">
+          <button 
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className="w-full flex items-center justify-center p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition-all"
+          >
+            <motion.div animate={{ rotate: isSidebarCollapsed ? 180 : 0 }}>
+              <TrendingUp size={20} className="rotate-90" />
+            </motion.div>
+          </button>
+        </div>
+
+        <nav className="flex-1 px-4 space-y-2 mt-2 overflow-y-auto">
           {[
             { id: 'students', label: 'Students', icon: <Users size={22} /> },
             { id: 'topics', label: 'Topics', icon: <BookOpen size={22} /> },
@@ -76,62 +109,100 @@ export const TeacherDashboard: React.FC = () => {
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => handleTabChange(tab.id as any)}
-              className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 group ${
+              onClick={() => {
+                handleTabChange(tab.id as any);
+                setIsSidebarOpen(false);
+              }}
+              title={isSidebarCollapsed ? tab.label : ''}
+              className={`w-full flex items-center ${isSidebarCollapsed ? 'lg:justify-center' : 'gap-4'} px-5 py-4 rounded-2xl transition-all duration-300 group ${
                 activeTab === tab.id 
                   ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-100' 
                   : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
-              <span className={`${activeTab === tab.id ? 'text-white' : 'text-slate-400 group-hover:text-emerald-600'} transition-colors`}>
+              <span className={`${activeTab === tab.id ? 'text-white' : 'text-slate-400 group-hover:text-emerald-600'} transition-colors shrink-0`}>
                 {tab.icon}
               </span>
-              <span className="font-bold tracking-tight">{tab.label}</span>
+              {(!isSidebarCollapsed || isSidebarOpen) && (
+                <span className="font-bold tracking-tight truncate">{tab.label}</span>
+              )}
             </button>
           ))}
         </nav>
 
-        <div className="p-6 border-t border-slate-100">
-          <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl mb-6 border border-slate-100">
-            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-slate-400 shadow-sm border border-slate-100">
-              <User size={24} />
+        <div className="p-4 border-t border-slate-100">
+          <div className={`flex items-center ${isSidebarCollapsed ? 'lg:justify-center' : 'gap-4'} p-3 bg-slate-50 rounded-2xl mb-4 border border-slate-100`}>
+            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 shadow-sm border border-slate-100 shrink-0">
+              <User size={20} />
             </div>
-            <div className="overflow-hidden">
-              <p className="text-sm font-black text-slate-900 truncate">{profile?.displayName || 'Teacher'}</p>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Educator</p>
-            </div>
+            {(!isSidebarCollapsed || isSidebarOpen) && (
+              <div className="overflow-hidden">
+                <p className="text-sm font-black text-slate-900 truncate">{profile?.displayName || 'Teacher'}</p>
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Educator</p>
+              </div>
+            )}
           </div>
           <button
             onClick={() => {
               playSound('click');
               window.location.reload();
             }}
-            className="w-full flex items-center gap-4 px-5 py-4 text-red-500 hover:bg-red-50 rounded-2xl transition-all font-bold"
+            title={isSidebarCollapsed ? 'Sign Out' : ''}
+            className={`w-full flex items-center ${isSidebarCollapsed ? 'lg:justify-center' : 'gap-4'} px-5 py-4 text-red-500 hover:bg-red-50 rounded-2xl transition-all font-bold`}
           >
-            <LogOut size={22} />
-            <span>Sign Out</span>
+            <LogOut size={22} className="shrink-0" />
+            {(!isSidebarCollapsed || isSidebarOpen) && <span>Sign Out</span>}
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-10 overflow-y-auto">
-        <header className="mb-12 flex justify-between items-center">
-          <div>
-            <h1 className="text-4xl font-black text-slate-900 mb-2">
-              Teacher <span className="text-emerald-600">Dashboard</span>
-            </h1>
-            <p className="text-slate-500 font-medium text-lg">Empowering the next generation of learners.</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <button className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-emerald-600 transition-all shadow-sm">
-              <Download size={20} />
-            </button>
-          </div>
-        </header>
+      <main className="flex-1 flex flex-col h-screen overflow-hidden">
+        {/* Top Header Bar (Mobile & Focus Mode Toggle) */}
+        <div className="lg:hidden p-4 bg-white border-b border-slate-200 flex justify-between items-center">
+          <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-slate-600">
+            <School size={24} />
+          </button>
+          <span className="font-display font-black text-xl text-slate-900">SomaAI</span>
+          <div className="w-10" /> {/* Spacer */}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 lg:p-10">
+          <header className={`mb-8 lg:mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-all duration-500 ${isFocusMode ? 'opacity-0 h-0 overflow-hidden mb-0' : 'opacity-100'}`}>
+            <div>
+              <h1 className="text-3xl lg:text-4xl font-black text-slate-900 mb-2">
+                Teacher <span className="text-emerald-600">Dashboard</span>
+              </h1>
+              <p className="text-slate-500 font-medium text-base lg:text-lg">Empowering the next generation of learners.</p>
+            </div>
+            <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+              <button 
+                onClick={() => setIsFocusMode(!isFocusMode)}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all"
+              >
+                <Target size={18} className={isFocusMode ? 'text-emerald-600' : ''} />
+                {isFocusMode ? 'Exit Focus' : 'Focus Mode'}
+              </button>
+              <button className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-emerald-600 transition-all shadow-sm">
+                <Download size={20} />
+              </button>
+            </div>
+          </header>
+
+          {isFocusMode && (
+            <div className="mb-6 flex justify-end">
+              <button 
+                onClick={() => setIsFocusMode(false)}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-100"
+              >
+                <Target size={18} />
+                Exit Focus Mode
+              </button>
+            </div>
+          )}
 
         {/* Main Content Sections */}
-        {activeTab === 'students' && (
+        {activeTab === 'students' && !isFocusMode && (
           <>
             {/* Overview Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
@@ -296,9 +367,10 @@ export const TeacherDashboard: React.FC = () => {
             </div>
           </div>
         )}
-      </main>
-    </div>
-  );
+      </div>
+    </main>
+  </div>
+);
 };
 
 const FeedbackModal: React.FC<{ student: any; onClose: () => void }> = ({ student, onClose }) => {

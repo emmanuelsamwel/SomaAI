@@ -1,55 +1,81 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { auth, googleProvider, signInWithPopup, db, doc, setDoc, getDoc } from '../firebase';
+import { auth, googleProvider, signInWithPopup, signInWithRedirect, getRedirectResult, db, doc, setDoc, getDoc } from '../firebase';
 import { LogIn, GraduationCap, School, AlertCircle } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useEffect } from 'react';
 
 export const Login: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const handleLogin = async (role: 'student' | 'teacher') => {
+  const handleLogin = async (role: 'student' | 'teacher', method: 'popup' | 'redirect' = 'popup') => {
     setError(null);
     setIsLoggingIn(true);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-      
-      const userRef = doc(db, 'users', user.uid);
-      // Check if user already exists to avoid overwriting role if they just want to sign in
-      const userSnap = await getDoc(userRef);
-      
-      if (!userSnap.exists()) {
-        await setDoc(userRef, {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          role: role,
-          language: 'English',
-          hobbies: [],
-          habits: []
-        });
+      if (method === 'popup') {
+        const result = await signInWithPopup(auth, googleProvider);
+        await handleUserSetup(result.user, role);
+      } else {
+        // For redirect, we store the intended role in localStorage so we can set it up after the redirect returns
+        localStorage.setItem('pending_role', role);
+        await signInWithRedirect(auth, googleProvider);
       }
-      
-      window.location.reload();
     } catch (error: any) {
       console.error('Login Error:', error);
-      
-      if (error.code === 'auth/popup-closed-by-user') {
-        setError("The login window was closed before finishing. Please try again.");
-      } else if (error.code === 'auth/unauthorized-domain') {
-        setError("This domain is not authorized for Google Sign-In. Please check your Firebase Console settings.");
-      } else if (error.code === 'auth/network-request-failed') {
-        setError("Network error. Please check your connection or try opening the app in a new tab.");
-      } else if (error.code === 'auth/internal-error') {
-        setError("A Firebase internal error occurred. Opening in a new tab often fixes this.");
-      } else {
-        setError(`Login failed: ${error.message || "Unknown error"}. Try opening the app in a new tab.`);
-      }
+      handleLoginError(error);
     } finally {
       setIsLoggingIn(false);
     }
   };
+
+  const handleUserSetup = async (user: any, role: string) => {
+    const userRef = doc(db, 'users', user.uid);
+    const userSnap = await getDoc(userRef);
+    
+    if (!userSnap.exists()) {
+      await setDoc(userRef, {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        role: role,
+        language: 'English',
+        hobbies: [],
+        habits: []
+      });
+    }
+    window.location.reload();
+  };
+
+  const handleLoginError = (error: any) => {
+    if (error.code === 'auth/popup-closed-by-user') {
+      setError("The login window was closed. Please try again or use the 'Mobile Fix' button below.");
+    } else if (error.code === 'auth/unauthorized-domain') {
+      setError("This domain is not authorized. Please check your Firebase Console settings.");
+    } else if (error.code === 'auth/network-request-failed') {
+      setError("Network error. Please check your connection.");
+    } else {
+      setError(`Login failed: ${error.message || "Unknown error"}. Try the 'Mobile Fix' button.`);
+    }
+  };
+
+  // Handle the result of a redirect login
+  useEffect(() => {
+    const checkRedirect = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          const pendingRole = localStorage.getItem('pending_role') || 'student';
+          await handleUserSetup(result.user, pendingRole);
+          localStorage.removeItem('pending_role');
+        }
+      } catch (error: any) {
+        console.error('Redirect Error:', error);
+        handleLoginError(error);
+      }
+    };
+    checkRedirect();
+  }, []);
 
   const openInNewTab = () => {
     window.open(window.location.href, '_blank');
@@ -86,12 +112,20 @@ export const Login: React.FC = () => {
               <AlertCircle size={24} className="shrink-0" />
               <p className="font-bold text-left">{error}</p>
             </div>
-            <button 
-              onClick={openInNewTab}
-              className="w-full py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl font-bold transition-colors text-xs"
-            >
-              Open App in New Tab (Recommended Fix)
-            </button>
+            <div className="flex flex-col gap-2">
+              <button 
+                onClick={() => handleLogin('student', 'redirect')}
+                className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold transition-all hover:bg-indigo-700 shadow-lg shadow-indigo-200"
+              >
+                Mobile Fix: Sign in with Redirect
+              </button>
+              <button 
+                onClick={openInNewTab}
+                className="w-full py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl font-bold transition-colors text-xs"
+              >
+                Open in New Tab
+              </button>
+            </div>
           </motion.div>
         )}
 
